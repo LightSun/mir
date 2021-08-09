@@ -193,10 +193,15 @@ foreach (num 13 14 15 16)
   add_test(gen-test${num} run_test -g ${PROJECT_SOURCE_DIR}/mir-tests/test${num}.mir)
 endforeach()
 
+
 add_executable (gen_loop "mir-tests/loop-sieve-gen.c")
 target_include_directories(gen_loop PRIVATE ${PROJECT_SOURCE_DIR})
 target_compile_definitions(gen_loop PRIVATE TEST_GEN_DEBUG=1 TEST_GEN_LOOP)
+if(NOT WIN32)
 target_link_libraries(gen_loop mir)
+else()
+target_link_libraries(gen_loop mir psapi) #link error
+endif()
 
 add_executable (gen_sieve "mir-tests/loop-sieve-gen.c")
 target_include_directories(gen_sieve PRIVATE ${PROJECT_SOURCE_DIR})
