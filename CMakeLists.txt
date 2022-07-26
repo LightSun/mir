@@ -14,7 +14,7 @@ if(NOT WIN32)
     $<$<CONFIG:RELEASE>:-O3>
     $<$<CONFIG:RelWithDebInfo>:-O3>
   )
-  add_compile_options(-std=gnu11 -Wno-abi -fsigned-char)
+  add_compile_options(-std=gnu11 -Wno-abi -fsigned-char -fPIC)
 endif()
 
 include(CheckCCompilerFlag)
@@ -39,12 +39,19 @@ message("C compiler flags: ${CMAKE_C_FLAGS}")
 option(BUILD_TESTING "" ON)
 include(CTest)
 
-# ------------------ LIBMIR -----------------------
-add_library(mir STATIC mir.c mir-gen.c c2mir/c2mir.c mir.h mir-gen.h c2mir/c2mir.h)
+add_library(mir OBJECT mir.c mir-gen.c c2mir/c2mir.c mir.h mir-gen.h c2mir/c2mir.h)
 target_include_directories(mir PRIVATE ${PROJECT_SOURCE_DIR})
 if(Threads_FOUND)
   target_compile_definitions(mir PUBLIC "MIR_PARALLEL_GEN")
 endif()
+
+# ------------------ LIBMIR -----------------------
+add_library(mir_static STATIC)
+target_link_libraries(mir_static PRIVATE mir)
+
+# ------------------ LIBMIR SO --------------------
+add_library(mir_shared SHARED)
+target_link_libraries(mir_shared PRIVATE mir)
 
 # ------------------ C2M --------------------------
 add_executable (c2m "c2mir/c2mir-driver.c")
@@ -65,12 +72,13 @@ target_include_directories(b2ctab PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(b2ctab mir)
 
 # ------------------ L2M --------------------------
-find_package(LLVM)
-if(LLVM_FOUND)
-  add_executable (l2m "llvm2mir/llvm2mir.c" "llvm2mir/llvm2mir-driver.c" "llvm2mir/llvm2mir.h")
-  target_include_directories(l2m PRIVATE ${PROJECT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
-  target_link_libraries(l2m mir m ${CMAKE_DL_LIBS} LLVM)
-endif()
+#find_package(LLVM)
+#if(LLVM_FOUND)
+#  message(STATUS "LLVM_FOUND")
+#  add_executable (l2m "llvm2mir/llvm2mir.c" "llvm2mir/llvm2mir-driver.c" "llvm2mir/llvm2mir.h")
+#  target_include_directories(l2m PRIVATE ${PROJECT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+#  target_link_libraries(l2m mir m ${CMAKE_DL_LIBS} LLVM)
+#endif()
 
 # ------------------ ADT tests --------------------------
 add_executable (varr_test "adt-tests/mir-varr-test.c")
@@ -88,11 +96,17 @@ target_include_directories(htab_test PRIVATE ${PROJECT_SOURCE_DIR})
 add_executable (reduce_test "adt-tests/mir-reduce-test.c")
 target_include_directories(reduce_test PRIVATE ${PROJECT_SOURCE_DIR})
 
+add_executable(cjit_test "heaven7/main.c")
+target_include_directories(reduce_test PRIVATE ${PROJECT_SOURCE_DIR})
+
 add_test(varr-test varr_test)
 add_test(dlist-test dlist_test)
 add_test(bitmap-test bitmap_test)
 add_test(htab-test htab_test)
 add_test(reduce-test reduce_test ${PROJECT_SOURCE_DIR}/c2mir/c2mir.c)
+#
+add_test(cjit_test cjit_test)
+target_link_libraries(cjit_test PUBLIC mir)
 
 # ------------------ MIR utility tests ------------------------
 add_executable (simplify_test "mir-tests/simplify.c")
@@ -193,15 +207,10 @@ foreach (num 13 14 15 16)
   add_test(gen-test${num} run_test -g ${PROJECT_SOURCE_DIR}/mir-tests/test${num}.mir)
 endforeach()
 
-
 add_executable (gen_loop "mir-tests/loop-sieve-gen.c")
 target_include_directories(gen_loop PRIVATE ${PROJECT_SOURCE_DIR})
 target_compile_definitions(gen_loop PRIVATE TEST_GEN_DEBUG=1 TEST_GEN_LOOP)
-if(NOT WIN32)
 target_link_libraries(gen_loop mir)
-else()
-target_link_libraries(gen_loop mir psapi) #link error
-endif()
 
 add_executable (gen_sieve "mir-tests/loop-sieve-gen.c")
 target_include_directories(gen_sieve PRIVATE ${PROJECT_SOURCE_DIR})

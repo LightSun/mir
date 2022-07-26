@@ -14,12 +14,9 @@ uint64_t get_heap () { return (uint64_t) sbrk (0); }
 #include <windows.h>
 #include <psapi.h>
 uint64_t get_heap () {
-    //link -lpsapi also can't find GetProcessMemoryInfo
-  /*
   HANDLE ph = GetCurrentProcess ();
   PROCESS_MEMORY_COUNTERS pmc;
-  if (GetProcessMemoryInfo (ph, &pmc, (DWORD)sizeof (pmc))) return pmc.WorkingSetSize;
-  */
+  if (GetProcessMemoryInfo (ph, &pmc, sizeof (pmc))) return pmc.WorkingSetSize;
   return 0;
 }
 #endif

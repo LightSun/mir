@@ -2,13 +2,15 @@
 # Run runtests.sh execution_program
 #
 
-outf=c-tests/__temp.out
-errf=c-tests/__temp.err
+outf=__c-tests-temp.out
+errf=__c-tests-temp.err
 all=0
 ok=0
 ctest_dir=`dirname $0`
 execution_program=$1
 compiler=$2
+
+EGREP=egrep
 
 ECHO=echo
 if test x$BASH_VERSION != x;then
@@ -61,16 +63,21 @@ do
 	done
 done
 
-for dir in new andrewchambers_c gcc lacc # $8cc avltree helloworld *lcc nano ^netlib %picoc set1 $-but-c2m *-but-l2m/c2m ^-but-l2m-gen %-but-clang-l2m
+for dir in havoc new andrewchambers_c gcc lacc # $8cc avltree helloworld *lcc nano ^netlib %picoc set1 $-but-c2m *-but-l2m/c2m ^-but-l2m-gen %-but-clang-l2m
 do
 	$ECHO ++++++++++++++Running tests in $dir+++++++++++++
 	if test -f $ctest_dir/$dir/main.c;then
 	   runtest $ctest_dir/$dir/main.c
 	   continue;
 	fi
-	if test -f $ctest_dir/$dir/add-main.c;then add_main=$ctest_dir/$dir/add-main.c;else add_main=;fi
 	for t in $ctest_dir/$dir/*.c;do
-	    if test x$t = x$add_main;then continue;fi
+	    if $ECHO $t|$EGREP '/add-[a-zA-Z0-9]+.c$' >/dev/null; then continue; fi
+	    if test -f $ctest_dir/$dir/add-`basename $t`;then add_main=$ctest_dir/$dir/add-`basename $t`
+	    elif test -f $ctest_dir/$dir/add-`basename $t .c`.mir;then
+		add_main=$ctest_dir/$dir/add-`basename $t .c`.mir
+	    else
+		add_main=
+	    fi
 	    runtest $t $add_main
 	done
 done

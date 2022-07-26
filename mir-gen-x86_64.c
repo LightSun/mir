@@ -1087,6 +1087,7 @@ static void target_machinize (gen_ctx_t gen_ctx) {
         SWAP (insn->ops[1], insn->ops[2], temp_op);
         insn->code = MIR_DGE;
         break;
+      default: break; /* do nothing */
       }
       break;
     }
@@ -1334,7 +1335,7 @@ struct pattern {
   const char *replacement;
 };
 
-// make imm always second operand (symplify for cmp and commutative op)
+// make imm always second operand (simplify for cmp and commutative op)
 // make result of cmp op always a register and memory only the 2nd operand if first is reg,
 // but not for FP (NAN) (simplify)
 // for FP cmp first operand should be always reg (machinize)
@@ -1686,11 +1687,11 @@ static void target_get_early_clobbered_hard_regs (MIR_insn_t insn, MIR_reg_t *hr
 // constraint: esp can not be index
 
 static int int8_p (int64_t v) { return INT8_MIN <= v && v <= INT8_MAX; }
-static int uint8_p (int64_t v) { return 0 <= v && v <= UINT8_MAX; }
+static int MIR_UNUSED uint8_p (int64_t v) { return 0 <= v && v <= UINT8_MAX; }
 static int int16_p (int64_t v) { return INT16_MIN <= v && v <= INT16_MAX; }
 static int MIR_UNUSED uint16_p (int64_t v) { return 0 <= v && v <= UINT16_MAX; }
 static int int32_p (int64_t v) { return INT32_MIN <= v && v <= INT32_MAX; }
-static int uint32_p (int64_t v) { return 0 <= v && v <= UINT32_MAX; }
+static int MIR_UNUSED uint32_p (int64_t v) { return 0 <= v && v <= UINT32_MAX; }
 
 static int dec_value (int ch) { return '0' <= ch && ch <= '9' ? ch - '0' : -1; }
 
@@ -1860,6 +1861,7 @@ static int pattern_match_p (gen_ctx_t gen_ctx, const struct pattern *pat, MIR_in
           && op.u.hard_reg_mem.scale != 2 && op.u.hard_reg_mem.scale != 4
           && op.u.hard_reg_mem.scale != 8)
         return FALSE;
+      if (!int32_p (op.u.hard_reg_mem.disp)) return FALSE;
       break;
     }
     case 'l':

@@ -1,0 +1,27 @@
+M0:	module
+proto0:	proto	i32, u64:U0___format, ...
+	import	printf
+add:	func	i32, i32:i0_a, i32:i0_b
+	local	i64:i0_sum, i64:i1_i, i64:i_0, i64:i_1, i64:i_2, i64:i_3, i64:i_4, i64:i_5
+	local	i64:i_6, i64:i_7
+# 2 args, 10 locals
+	mov	i0_sum, 0
+	mov	i1_i, 1
+	bges	L3, i1_i, 11
+L1:
+	mov	i_1, i0_sum
+	adds	i_1, i_1, i1_i
+	mov	i0_sum, i_1
+L2:
+	mov	i_3, i1_i
+	adds	i_3, i_3, 1
+	mov	i1_i, i_3
+	blts	L1, i1_i, 11
+L3:
+	call	proto0, printf, i_5, "a=%d\n\000", i0_a
+	adds	i_6, i0_sum, i0_a
+	adds	i_7, i_6, i0_b
+	ret	i_7
+	endfunc
+	export	add
+	endmodule

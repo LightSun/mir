@@ -4,10 +4,11 @@ BUILD_DIR=.
 
 ADDITIONAL_INCLUDE_PATH:=
 UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
     XCRUN := $(shell xcrun --show-sdk-path >/dev/null 2>&1 && echo yes || echo no)
     ifeq ($(XCRUN),yes)
-        ADDITIONAL_INCLUDE_PATH := $(shell xcrun --show-sdk-path)/usr/include
+      ADDITIONAL_INCLUDE_PATH := $(shell xcrun --show-sdk-path)/usr/include
     endif
 endif
 
@@ -24,7 +25,7 @@ ifeq ($(OS),Windows_NT)
     endif
   endif
   ifeq ($(CC),gcc)
-    CFLAGS += -g -std=gnu11 -Wno-abi -fsigned-char
+    CFLAGS += -fPIC -g -std=gnu11 -Wno-abi -fsigned-char
     CFLAGS += -fno-tree-sra
     COPTFLAGS = -O3 -DNDEBUG
     CDEBFLAGS =
@@ -53,7 +54,7 @@ ifeq ($(OS),Windows_NT)
 else
   EXE=
   CC=gcc
-  CFLAGS += -g -std=gnu11 -Wno-abi -fsigned-char
+  CFLAGS += -fPIC -g -std=gnu11 -Wno-abi -fsigned-char
   ifneq ($(ADDITIONAL_INCLUDE_PATH),)
     CFLAGS += -DADDITIONAL_INCLUDE_PATH=\"$(ADDITIONAL_INCLUDE_PATH)\"
   endif
@@ -79,12 +80,36 @@ else
   COMPILE_AND_LINK = $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
 endif
 
+API_VERSION=0
+MAJOR_VERSION=0
+MINOR_VERSION=3
+
 ifeq ($(CC),cl)
   OBJSUFF=obj
   LIBSUFF=lib
+  SOLIB=libmir.dll
 else
   OBJSUFF=o
   LIBSUFF=a
+  ifeq ($(OS),Windows_NT)
+    ifeq ($(findstring MINGW,$(UNAME_S)),MINGW)
+      SONAME=libmir.so.$(API_VERSION)
+      SOLIBFLAGS=-shared -Wl,-soname,$(SONAME)
+      SOLIB=$(SONAME).$(MAJOR_VERSION).$(MINOR_VERSION)
+    else
+      SOLIB=libmir.dll
+    endif
+  else
+    ifeq ($(UNAME_S),Darwin)
+      SOLIBVERSION=$(API_VERSION).$(MAJOR_VERSION)
+      SOLIB=libmir.$(API_VERSION).dylib
+      SOLIBFLAGS=-dynamiclib -install_name "$(SOLIB)" -current_version $(SOLIBVERSION).$(MINOR_VERSION) -compatibility_version $(SOLIBVERSION)
+    else
+      SONAME=libmir.so.$(API_VERSION)
+      SOLIBFLAGS=-shared -Wl,-soname,$(SONAME)
+      SOLIB=$(SONAME).$(MAJOR_VERSION).$(MINOR_VERSION)
+    endif
+  endif
 endif
 
 C2M_BOOTSTRAP_FLAGS = -DMIR_BOOTSTRAP
@@ -111,31 +136,44 @@ Q=@
 # Entries should be used for building and installation
 .PHONY: all debug install uninstall clean test bench
 
-all: $(BUILD_DIR)/libmir.$(LIBSUFF) $(EXECUTABLES)
+all: $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB) $(EXECUTABLES)
 
 debug: CFLAGS:=$(subst $(COPTFLAGS),$(CDEBFLAGS),$(CFLAGS))
-debug: $(BUILD_DIR)/libmir.$(LIBSUFF) $(EXECUTABLES)
+debug: $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB) $(EXECUTABLES)
 
-install: $(BUILD_DIR)/libmir.$(LIBSUFF) $(EXECUTABLES) | $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin
-	install -m a+r $(SRC_DIR)/mir.h $(SRC_DIR)/mir-gen.h $(SRC_DIR)/c2mir/c2mir.h $(PREFIX)/include
-	install -m a+r $(BUILD_DIR)/libmir.$(LIBSUFF) $(PREFIX)/lib
+install: $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB) $(EXECUTABLES) | $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin
+	install -m a+r $(SRC_DIR)/mir.h $(SRC_DIR)/mir-dlist.h $(SRC_DIR)/mir-varr.h $(SRC_DIR)/mir-htab.h\
+		       $(SRC_DIR)/mir-gen.h $(SRC_DIR)/c2mir/c2mir.h $(PREFIX)/include
+	install -m a+r $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB) $(PREFIX)/lib
+ifeq ($(OS),Windows_NT)
+else
+    ifeq ($(UNAME_S),Darwin)
+	rm -f $(PREFIX)/lib/libmir.dylib
+	ln -s $(PREFIX)/lib/$(SOLIB) $(PREFIX)/lib/libmir.dylib
+	install_name_tool -change "$(SOLIB)" "$(PREFIX)/lib/$(SOLIB)" $(PREFIX)/lib/$(SOLIB)
+    else
+	rm -f $(PREFIX)/lib/$(SONAME)
+	ln -s $(PREFIX)/lib/$(SOLIB) $(PREFIX)/lib/$(SONAME)
+    endif
+endif
 	install -m a+rx $(EXECUTABLES) $(PREFIX)/bin
 
 $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin:
 	   mkdir -p $@
 
-uninstall: $(BUILD_DIR)/libmir.$(LIBSUFF) $(EXECUTABLES) | $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin
+uninstall: $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB) $(EXECUTABLES) | $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin
 	$(RM) $(PREFIX)/include/mir.h $(PREFIX)/include/mir-gen.h $(PREFIX)/include/c2mir.h
-	$(RM) $(PREFIX)/lib/libmir.$(LIBSUFF)
+	$(RM) $(PREFIX)/lib/libmir.$(LIBSUFF) $(PREFIX)/lib/$(SOLIB)
 	$(RM) $(EXECUTABLES:$(BUILD_DIR)/%=$(PREFIX)/bin/%)
 	-rmdir $(PREFIX)/include $(PREFIX)/lib $(PREFIX)/bin
 	-rmdir $(PREFIX)
 
 clean: clean-mir clean-c2m clean-utils clean-l2m clean-adt-tests clean-mir-tests clean-mir2c-test clean-bench
-	$(RM) $(EXECUTABLES) $(BUILD_DIR)/libmir.$(LIBSUFF)
+	$(RM) $(EXECUTABLES) $(BUILD_DIR)/libmir.$(LIBSUFF) $(BUILD_DIR)/$(SOLIB)
 
-test: adt-test simplify-test io-test scan-test interp-test gen-test readme-example-test\
-      mir2c-test c2mir-test $(L2M-TEST)
+test: readme-example-test c2mir-test
+
+test-all: adt-test simplify-test io-test scan-test mir2c-test $(L2M-TEST) test
 
 bench: interp-bench gen-bench gen-bench2 io-bench mir2c-bench c2mir-sieve-bench gen-speed c2mir-bench
 	@echo ==============================Bench is done
@@ -159,6 +197,14 @@ ifeq ($(CC),cl)
 	lib -nologo $^ -OUT:$@
 else
 	$(AR) rcs $@ $^
+endif
+
+# ------------------ LIBMIR SO --------------------
+$(BUILD_DIR)/$(SOLIB): $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(BUILD_DIR)/c2mir/c2mir.$(OBJSUFF)
+ifeq ($(CC),cl)
+	$(CC) -nologo -D_USRDLL -D_WINDLL $^ -link -DLL -OUT:$@
+else
+	$(CC) $(SOLIBFLAGS) -o $@ $^
 endif
 
 # ------------------ C2M --------------------------
@@ -204,7 +250,7 @@ clean-l2m:
 $(BUILD_DIR)/mir-utils:
 	   mkdir -p $@
 
-$(BUILD_DIR)/mir-utils/%.$(OBJSUFF): $(SRC_DIR)/mir-utils/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/mir-utils/%.$(OBJSUFF): $(SRC_DIR)/mir-utils/%.c | $(BUILD_DIR)/mir-utils
 	$(COMPILE) -c $< $(OBJO)$@
 
 .PHONY: clean-utils
@@ -392,10 +438,11 @@ clean-mir-interp-tests:
 # ------------------ MIR gen tests --------------------------
 
 .PHONY: clean-mir-gen-tests
-.PHONY: gen-test gen-loop-test gen-sieve-test gen-test1 gen-test2 gen-test3 gen-test4 gen-test5 gen-test6 gen-test7
+.PHONY: gen-test gen-loop-test gen-sieve-test gen-issue219-test
+.PHONY: gen-test1 gen-test2 gen-test3 gen-test4 gen-test5 gen-test6 gen-test7
 .PHONY: gen-test8 gen-test9 gen-test10 gen-test11 gen-test12 gen-test13 gen-test14 gen-test15 gen-test16
 
-gen-test: gen-loop-test gen-sieve-test gen-test1 gen-test2 gen-test3 gen-test4 gen-test5 gen-test6 gen-test7\
+gen-test: gen-loop-test gen-sieve-test gen-issue219-test gen-test1 gen-test2 gen-test3 gen-test4 gen-test5 gen-test6 gen-test7\
           gen-test8 gen-test9 gen-test10 gen-test11 gen-test12 gen-test13 gen-test14 gen-test15 gen-test16
 
 gen-test-loop: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR)/mir-tests/loop-sieve-gen.c | $(BUILD_DIR)/mir-tests
@@ -405,6 +452,10 @@ gen-test-loop: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC
 gen-test-sieve: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR)/mir-tests/loop-sieve-gen.c | $(BUILD_DIR)/mir-tests
 	$(COMPILE_AND_LINK) -DTEST_GEN_SIEVE -DTEST_GEN_DEBUG=1 $^ $(LDLIBS) $(EXEO)$(BUILD_DIR)/mir-tests/gen-sieve-test$(EXE)
 	$(BUILD_DIR)/mir-tests/gen-sieve-test
+
+gen-issue219-test: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR)/mir-tests/issue219.c | $(BUILD_DIR)/mir-tests
+	$(COMPILE_AND_LINK) -DTEST_GEN_SIEVE -DTEST_GEN_DEBUG=1 $^ $(LDLIBS) $(EXEO)$(BUILD_DIR)/mir-tests/issue219$(EXE)
+	$(BUILD_DIR)/mir-tests/issue219
 
 gen-test1: $(BUILD_DIR)/run-test$(EXE)
 	$(BUILD_DIR)/run-test$(EXE) -d $(SRC_DIR)/mir-tests/test1.mir
@@ -459,7 +510,7 @@ gen-test16: $(BUILD_DIR)/run-test$(EXE)
 	$(BUILD_DIR)/run-test$(EXE) -g $(SRC_DIR)/mir-tests/test16.mir
 
 clean-mir-gen-tests:
-	$(RM) $(BUILD_DIR)/mir-tests/gen-loop-test$(EXE)
+	$(RM) $(BUILD_DIR)/mir-tests/gen-loop-test$(EXE) $(BUILD_DIR)/mir-tests/issue219$(EXE)
 
 # ------------------ readme example test ----------------
 
@@ -637,15 +688,17 @@ gen-bench: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR
 	$(COMPILE_AND_LINK) -DTEST_GEN_SIEVE $^ $(EXEO)$(BUILD_DIR)/gen-bench$(EXE) $(LDLIBS)
 	$(BUILD_DIR)/gen-bench && size $(BUILD_DIR)/gen-bench
 
-gen-bench2: $(BUILD_DIR)/c2m
-	echo +++++ Compiling and generating all code for c2m: +++++
-	@for i in 0 1 2 3;do \
-	   echo === Optimization level $$i:;\
-           echo 'int main () {return 0;}'\
-	   | /usr/bin/time $(BUILD_DIR)/c2m -O$$i -Dx86_64 -I$(SRC_DIR) $(SRC_DIR)/mir-gen.c $(SRC_DIR)/c2mir/c2mir.c\
-	                                                     $(SRC_DIR)/c2mir/c2mir-driver.c $(SRC_DIR)/mir.c -el -i;\
-	   rm -f a.bmir;\
-	done
+gen-bench2: $(BUILD_DIR)/c2m # Ignore M1 MacOs as it needs another procedure to make code executable
+	@if test $(UNAME_S) != Darwin || test $(UNAME_M) != arm64; then\
+	  echo +++++ Compiling and generating all code for c2m: +++++;\
+	  for i in 0 1 2 3;do \
+	    echo === Optimization level $$i:;\
+            echo 'int main () {return 0;}'\
+	    | /usr/bin/time $(BUILD_DIR)/c2m -O$$i -Dx86_64 -I$(SRC_DIR) $(SRC_DIR)/mir-gen.c $(SRC_DIR)/c2mir/c2mir.c\
+	                                                      $(SRC_DIR)/c2mir/c2mir-driver.c $(SRC_DIR)/mir.c -el -i;\
+	    rm -f a.bmir;\
+	  done;\
+	fi
 
 gen-speed: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR)/mir-tests/loop-sieve-gen.c
 	if type valgrind  > /dev/null 2>&1; then \
@@ -654,7 +707,7 @@ gen-speed: $(BUILD_DIR)/mir.$(OBJSUFF) $(BUILD_DIR)/mir-gen.$(OBJSUFF) $(SRC_DIR
 	fi
 
 c2mir-sieve-bench: $(BUILD_DIR)/c2m
-	$(BUILD_DIR)/c2m -DSIEVE_BENCH -v sieve.c -eg && size $(BUILD_DIR)/c2m
+	$(BUILD_DIR)/c2m -DSIEVE_BENCH -v $(SRC_DIR)/sieve.c -eg && size $(BUILD_DIR)/c2m
 
 c2mir-bench: $(BUILD_DIR)/c2m
 	$(SRC_DIR)/c-benchmarks/run-benchmarks.sh

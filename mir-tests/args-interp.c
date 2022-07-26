@@ -2,9 +2,9 @@
 #include <inttypes.h>
 #include "scan-args.h"
 
-static void pri (int64_t c) { printf ("pri: %" PRIx64 "\n", c); }
-static void prf (float f) { printf ("prf: %f\n", f); }
-static void prd (double d) { printf ("prd: %f\n", d); }
+static void pri (int64_t c) { printf ("%" PRIx64 "\n", c); }
+static void prf (float f) { printf ("%f\n", f); }
+static void prd (double d) { printf ("%f\n", d); }
 
 int main (void) {
   MIR_module_t m;
@@ -15,7 +15,6 @@ int main (void) {
   MIR_load_external (ctx, "prf", prf);
   MIR_load_external (ctx, "prd", prd);
   m = create_args_module (ctx);
-  //printf("h7: size = %d\n", DLIST_LENGTH(MIR_item_t, m->items));
   func = DLIST_TAIL (MIR_item_t, m->items);
   MIR_load_module (ctx, m);
   MIR_link (ctx, MIR_set_interp_interface, NULL);

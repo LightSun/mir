@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <stdint.h>
 
 #ifndef _WIN32
@@ -112,7 +113,7 @@ static const char *lib_suffix = ".dll";
 #endif
 
 static struct c2mir_options options;
-static int gen_debug_p;
+static int gen_debug_level;
 
 typedef void *void_ptr_t;
 
@@ -230,7 +231,7 @@ static void init_options (int argc, char *argv[]) {
   options.debug_p = options.verbose_p = options.ignore_warnings_p = FALSE;
   options.asm_p = options.object_p = options.no_prepro_p = options.prepro_only_p = FALSE;
   options.syntax_only_p = options.pedantic_p = FALSE;
-  gen_debug_p = FALSE;
+  gen_debug_level = -1;
   VARR_CREATE (char, temp_string, 0);
   VARR_CREATE (char_ptr_t, headers, 0);
   VARR_CREATE (macro_command_t, macro_commands, 0);
@@ -240,8 +241,8 @@ static void init_options (int argc, char *argv[]) {
   for (int i = 1; i < argc; i++) {
     if (strcmp (argv[i], "-d") == 0) {
       options.verbose_p = options.debug_p = TRUE;
-    } else if (strcmp (argv[i], "-dg") == 0) {
-      gen_debug_p = TRUE;
+    } else if (strncmp (argv[i], "-dg", 3) == 0) {
+      gen_debug_level = argv[i][3] != '\0' ? atoi (&argv[i][3]) : INT_MAX;
     } else if (strcmp (argv[i], "-S") == 0) {
       options.asm_p = TRUE;
     } else if (strcmp (argv[i], "-c") == 0) {
@@ -322,8 +323,8 @@ static void init_options (int argc, char *argv[]) {
                "Usage: %s options (-i | -s \"program\" | source files); where options are:\n",
                argv[0]);
       fprintf (stderr, "\n");
-      fprintf (stderr,
-               "  -v, -d, -dg -- output work, general debug, or MIR-generator debug info\n");
+      fprintf (stderr, "  -v, -d -- output work, parser debug info\n");
+      fprintf (stderr, "  -dg[level] -- output given (or max) level MIR-generator debug info\n");
       fprintf (stderr, "  -E -- output C preprocessed code into stdout\n");
       fprintf (stderr, "  -Dname[=value], -Uname -- predefine or unpredefine macros\n");
       fprintf (stderr, "  -Idir, -Ldir -- add directories to search include headers or lbraries\n");
@@ -410,7 +411,7 @@ static void *import_resolver (const char *name) {
 
 static int mir_read_func (MIR_context_t ctx) { return t_getc (&curr_input); }
 
-static const char *get_base_name (const char *name, const char *suffix) {
+static const char *get_file_name (const char *name, const char *suffix) {
   const char *res = strrchr (name, slash);
 
   if (res != NULL) name = res + 1;
@@ -421,13 +422,17 @@ static const char *get_base_name (const char *name, const char *suffix) {
   return VARR_ADDR (char, temp_string);
 }
 
-static FILE *get_output_file (const char **base_name, const char *source_name, const char *suffix) {
+static FILE *get_output_file (const char *file_name) {
   FILE *f;
-
-  *base_name = get_base_name (source_name, suffix);
-  if ((f = fopen (*base_name, "wb")) != NULL) return f;
-  fprintf (stderr, "cannot create file %s\n", *base_name);
+  if ((f = fopen (file_name, "wb")) != NULL) return f;
+  fprintf (stderr, "cannot create file %s\n", file_name);
   exit (1);  // ???
+}
+
+static FILE *get_output_file_from_parts (const char **result_file_name, const char *out_file_name,
+                                         const char *source_name, const char *suffix) {
+  *result_file_name = out_file_name != NULL ? out_file_name : get_file_name (source_name, suffix);
+  return get_output_file (*result_file_name);
 }
 
 static void parallel_error (const char *message) {
@@ -459,7 +464,7 @@ static size_t inputs_start;
 
 static void *compile (void *arg) {
   compiler_t compiler = arg;
-  const char *base_name;
+  const char *result_file_name;
   MIR_context_t ctx = compiler->ctx;
   int error_p;
   size_t len;
@@ -485,8 +490,9 @@ static void *compile (void *arg) {
     if (mir_mutex_unlock (&queue_mutex)) parallel_error ("error in mutex unlock");
     FILE *f = (!options.asm_p && !options.object_p
                  ? NULL
-                 : get_output_file (&base_name, compiler->input.input_name,
-                                    options.asm_p ? ".mir" : ".bmir"));
+                 : get_output_file_from_parts (&result_file_name, options.output_file_name,
+                                               compiler->input.input_name,
+                                               options.asm_p ? ".mir" : ".bmir"));
     error_p = !c2mir_compile (ctx, &compiler->input.options, t_getc, &compiler->input,
                               compiler->input.input_name, f);
     if (mir_mutex_lock (&queue_mutex)) parallel_error ("error in mutex lock");
@@ -575,12 +581,13 @@ static void send_to_compile (input_t *input) {
     return;
   }
 #if !MIR_PARALLEL_GEN
-  const char *base_name;
+  const char *result_file_name;
   FILE *f;
 
   f = (!options.asm_p && !options.object_p
          ? NULL
-         : get_output_file (&base_name, input->input_name, options.asm_p ? ".mir" : ".bmir"));
+         : get_output_file_from_parts (&result_file_name, options.output_file_name,
+                                       input->input_name, options.asm_p ? ".mir" : ".bmir"));
   if (!c2mir_compile (main_ctx, &input->options, t_getc, input, input->input_name, f))
     result_code = 1;
 #else
@@ -624,7 +631,7 @@ static void sort_modules (MIR_context_t ctx) {
     DLIST_APPEND (MIR_module_t, *list, VARR_GET (MIR_module_t, modules, i));
   VARR_DESTROY (MIR_module_t, modules);
 }
-
+//./c2m.exe -S test.c
 int main (int argc, char *argv[], char *env[]) {
   int i, bin_p;
   size_t len;
@@ -725,7 +732,7 @@ int main (int argc, char *argv[], char *env[]) {
         || (len >= 4 && strcmp (curr_input.input_name + len - 4, ".mir") == 0)) {
       DLIST (MIR_module_t) *mlist = MIR_get_module_list (main_ctx);
       MIR_module_t m, last_m = DLIST_TAIL (MIR_module_t, *mlist);
-      const char *base_name;
+      const char *result_file_name;
       FILE *f;
 
       if (bin_p) {
@@ -738,13 +745,14 @@ int main (int argc, char *argv[], char *env[]) {
       if (!options.prepro_only_p && !options.syntax_only_p
           && ((bin_p && !options.object_p && options.asm_p)
               || (!bin_p && !options.asm_p && options.object_p))) {
-        f = get_output_file (&base_name, curr_input.input_name, bin_p ? ".mir" : ".bmir");
+        f = get_output_file_from_parts (&result_file_name, options.output_file_name,
+                                        curr_input.input_name, bin_p ? ".mir" : ".bmir");
         for (m = last_m == NULL ? DLIST_HEAD (MIR_module_t, *mlist)
                                 : DLIST_NEXT (MIR_module_t, last_m);
              m != NULL; m = DLIST_NEXT (MIR_module_t, m))
           (bin_p ? MIR_output_module : MIR_write_module) (main_ctx, f, m);
         if (ferror (f) || fclose (f)) {
-          fprintf (stderr, "error in writing file %s%s\n", base_name, bin_p ? ".mir" : ".bmir");
+          fprintf (stderr, "error in writing file %s\n", result_file_name);
           result_code = 1;
         }
       }
@@ -821,13 +829,16 @@ int main (int argc, char *argv[], char *env[]) {
           fprintf (stderr, "exit code: %lu\n", (long unsigned) result_code);
         }
       } else {
-        int n_gen = gen_debug_p || threads_num == 0 ? 1 : threads_num;
+        int n_gen = gen_debug_level >= 0 || threads_num == 0 ? 1 : threads_num;
 
         MIR_gen_init (main_ctx, n_gen);
         for (int i = 0; i < n_gen; i++) {
           if (optimize_level >= 0)
             MIR_gen_set_optimize_level (main_ctx, i, (unsigned) optimize_level);
-          if (gen_debug_p) MIR_gen_set_debug_file (main_ctx, i, stderr);
+          if (gen_debug_level >= 0) {
+            MIR_gen_set_debug_file (main_ctx, i, stderr);
+            MIR_gen_set_debug_level (main_ctx, i, gen_debug_level);
+          }
         }
         MIR_link (main_ctx,
                   gen_exec_p ? (n_gen > 1 ? MIR_set_parallel_gen_interface : MIR_set_gen_interface)

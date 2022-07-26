@@ -196,7 +196,6 @@ static MIR_op_t get_new_hard_reg_mem_op (gen_ctx_t gen_ctx, MIR_type_t type, MIR
 
 static MIR_op_t new_hard_reg_mem_op (gen_ctx_t gen_ctx, MIR_insn_t anchor, MIR_type_t type,
                                      MIR_disp_t disp, MIR_reg_t base) {
-  MIR_context_t ctx = gen_ctx->ctx;
   MIR_insn_t insn1, insn2;
   MIR_op_t op = get_new_hard_reg_mem_op (gen_ctx, type, disp, base, &insn1, &insn2);
   if (insn1 != NULL) gen_add_insn_before (gen_ctx, anchor, insn1);
@@ -1027,6 +1026,7 @@ static void target_machinize (gen_ctx_t gen_ctx) {
   }
 }
 
+#if !defined(__APPLE__)
 static void isave (gen_ctx_t gen_ctx, MIR_insn_t anchor, int disp, MIR_reg_t base,
                    MIR_reg_t hard_reg) {
   gen_mov (gen_ctx, anchor, MIR_MOV, new_hard_reg_mem_op (gen_ctx, anchor, MIR_T_I64, disp, base),
@@ -1038,6 +1038,7 @@ static void fsave (gen_ctx_t gen_ctx, MIR_insn_t anchor, int disp, MIR_reg_t bas
   gen_mov (gen_ctx, anchor, MIR_LDMOV, new_hard_reg_mem_op (gen_ctx, anchor, MIR_T_LD, disp, base),
            _MIR_new_hard_reg_op (gen_ctx->ctx, hard_reg));
 }
+#endif
 
 static void target_make_prolog_epilog (gen_ctx_t gen_ctx, bitmap_t used_hard_regs,
                                        size_t stack_slots_num) {
@@ -1045,7 +1046,6 @@ static void target_make_prolog_epilog (gen_ctx_t gen_ctx, bitmap_t used_hard_reg
   MIR_func_t func;
   MIR_insn_t anchor, new_insn;
   MIR_op_t sp_reg_op, fp_reg_op, treg_op, treg_op2;
-  int64_t start;
   int save_prev_stack_p;
   size_t i, offset, frame_size, frame_size_after_saved_regs, saved_iregs_num, saved_fregs_num;
 
@@ -1090,10 +1090,10 @@ static void target_make_prolog_epilog (gen_ctx_t gen_ctx, bitmap_t used_hard_reg
     frame_size += 16;
   }
   frame_size += 16; /* lr/fp */
+  treg_op2 = _MIR_new_hard_reg_op (ctx, R10_HARD_REG);
   if (frame_size < (1 << 12)) {
     new_insn = MIR_new_insn (ctx, MIR_SUB, sp_reg_op, sp_reg_op, MIR_new_int_op (ctx, frame_size));
   } else {
-    treg_op2 = _MIR_new_hard_reg_op (ctx, R10_HARD_REG);
     new_insn = MIR_new_insn (ctx, MIR_MOV, treg_op2, MIR_new_int_op (ctx, frame_size));
     gen_add_insn_before (gen_ctx, anchor, new_insn); /* t = frame_size */
     new_insn = MIR_new_insn (ctx, MIR_SUB, sp_reg_op, sp_reg_op, treg_op2);
@@ -1113,6 +1113,7 @@ static void target_make_prolog_epilog (gen_ctx_t gen_ctx, bitmap_t used_hard_reg
 #if !defined(__APPLE__)
   if (func->vararg_p) {  // ??? saving only regs corresponding to ...
     MIR_reg_t base = SP_HARD_REG;
+    int64_t start;
 
     start = (int64_t) frame_size - reg_save_area_size;
     if ((start + 184) >= (1 << 12)) {
@@ -1194,16 +1195,17 @@ static void target_make_prolog_epilog (gen_ctx_t gen_ctx, bitmap_t used_hard_reg
   /* Restore lr, sp, fp */
   gen_mov (gen_ctx, anchor, MIR_MOV, _MIR_new_hard_reg_op (ctx, LINK_HARD_REG),
            _MIR_new_hard_reg_mem_op (ctx, MIR_T_I64, 8, FP_HARD_REG, MIR_NON_HARD_REG, 1));
-  if (frame_size < (1 << 12)) {
-    new_insn = MIR_new_insn (ctx, MIR_ADD, sp_reg_op, fp_reg_op, MIR_new_int_op (ctx, frame_size));
-  } else {
-    new_insn = MIR_new_insn (ctx, MIR_MOV, treg_op, MIR_new_int_op (ctx, frame_size));
-    gen_add_insn_before (gen_ctx, anchor, new_insn); /* t = frame_size */
-    new_insn = MIR_new_insn (ctx, MIR_ADD, sp_reg_op, fp_reg_op, treg_op);
-  }
-  gen_add_insn_before (gen_ctx, anchor, new_insn); /* sp = fp + (frame_size|t) */
+  gen_mov (gen_ctx, anchor, MIR_MOV, treg_op2, fp_reg_op); /* r10 = fp */
   gen_mov (gen_ctx, anchor, MIR_MOV, fp_reg_op,
            _MIR_new_hard_reg_mem_op (ctx, MIR_T_I64, 0, FP_HARD_REG, MIR_NON_HARD_REG, 1));
+  if (frame_size < (1 << 12)) {
+    new_insn = MIR_new_insn (ctx, MIR_ADD, sp_reg_op, treg_op2, MIR_new_int_op (ctx, frame_size));
+  } else {
+    new_insn = MIR_new_insn (ctx, MIR_MOV, treg_op, MIR_new_int_op (ctx, frame_size));
+    gen_add_insn_before (gen_ctx, anchor, new_insn); /* t(r9) = frame_size */
+    new_insn = MIR_new_insn (ctx, MIR_ADD, sp_reg_op, treg_op2, treg_op);
+  }
+  gen_add_insn_before (gen_ctx, anchor, new_insn); /* sp = r10 + (frame_size|t) */
 }
 
 struct pattern {
@@ -1245,8 +1247,8 @@ struct pattern {
      Mf - memory of float
      Md - memory of double
      Mld - memory of long double
-     I -- immediate as 3th op for arithemtic insn (12-bit unsigned with possible 12-bit LSL)
-     Iu -- immediate for arithemtic insn roundup to 16
+     I -- immediate as 3th op for arithmetic insn (12-bit unsigned with possible 12-bit LSL)
+     Iu -- immediate for arithmetic insn roundup to 16
      SR -- any immediate for right 64-bit shift (0-63)
      Sr -- any immediate for right 32-bit shift (0-31)
      SL -- any immediate for left 64-bit shift (0-63)
@@ -1852,13 +1854,13 @@ static int arithm_roundup_const (uint64_t v, int *imm) {
 }
 
 /* Return immr for right 64-bit or 32-bit (if SHORT_P) shift by V.  If the
-   shift can not be be represented, return FALSE. */
+   shift can not be represented, return FALSE. */
 static int rshift_const (int64_t v, int short_p) {
   return v < 0 || v > 63 || (short_p && v > 31) ? -1 : v;
 }
 
 /* Return immr and imms for left 64-bit or 32-bit (if SHORT_P) shift
-   by V.  If the shift can not be be represented, return FALSE. */
+   by V.  If the shift can not be represented, return FALSE. */
 static int lshift_const_p (int64_t v, int short_p, int *immr, int *imms) {
   if (short_p) {
     if (v < 0 || v > 31) return FALSE;
