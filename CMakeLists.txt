@@ -10,10 +10,11 @@ set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
 if(NOT WIN32)
-  add_compile_options(
-    $<$<CONFIG:RELEASE>:-O3>
-    $<$<CONFIG:RelWithDebInfo>:-O3>
-  )
+    #for debug
+#  add_compile_options(
+#    $<$<CONFIG:RELEASE>:-O3>
+#    $<$<CONFIG:RelWithDebInfo>:-O3>
+#  )
   add_compile_options(-std=gnu11 -Wno-abi -fsigned-char -fPIC)
 endif()
 

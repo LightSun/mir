@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <stdio.h>
+
 static char *read_file (const char *name) {
   FILE *f;
   size_t flen, rlen;

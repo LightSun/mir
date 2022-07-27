@@ -11186,6 +11186,7 @@ static void gen_memset (c2m_ctx_t c2m_ctx, MIR_disp_t disp, MIR_reg_t base, mir_
   emit_insn (c2m_ctx, MIR_new_insn_arr (ctx, MIR_CALL, 6 /* args + proto + func + res */, args));
 }
 
+//disp: addr offset
 static void gen_memcpy (c2m_ctx_t c2m_ctx, MIR_disp_t disp, MIR_reg_t base, op_t val,
                         mir_size_t len) {
   gen_ctx_t gen_ctx = c2m_ctx->gen_ctx;
