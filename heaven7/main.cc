@@ -86,7 +86,7 @@ int main(int argc, char *argv[]){
 
     /* ctx is a context created by MIR_init */
     MIR_load_module (ctx, mir_module);
-    MIR_load_external (ctx, "printf", printf);
+    MIR_load_external (ctx, "printf", (void*)printf);
 
     MIR_output (ctx, stderr);
    // MIR_link (ctx, MIR_set_interp_interface, import_resolver);
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]){
     MIR_gen_set_debug_file (ctx, 0, stderr);
     //gen and execute
     MIR_link (ctx, MIR_set_gen_interface, NULL);
-    Addr fun_addr = MIR_gen (ctx, 0, main_func);
+    Addr fun_addr = (Addr)MIR_gen (ctx, 0, main_func);
     int res = fun_addr (1, 2);
     fprintf (stderr, "%s: %d\n", file, res);
 

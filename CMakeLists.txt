@@ -3,19 +3,20 @@ cmake_minimum_required (VERSION 3.8)
 
 #set(CMAKE_C_COMPILER "clang-cl")
 
-project ("MIR")
+project ("MIR" LANGUAGES C CXX)
 
 set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
 if(NOT WIN32)
-    #for debug
+    #below just for non-debug
 #  add_compile_options(
 #    $<$<CONFIG:RELEASE>:-O3>
 #    $<$<CONFIG:RelWithDebInfo>:-O3>
 #  )
-  add_compile_options(-std=gnu11 -Wno-abi -fsigned-char -fPIC)
+  #add_compile_options(-std=gnu11 -Wno-abi -fsigned-char -fPIC)
+  add_compile_options(-std=c++11 -Wno-abi -fsigned-char -fPIC)
 endif()
 
 include(CheckCCompilerFlag)
@@ -97,8 +98,14 @@ target_include_directories(htab_test PRIVATE ${PROJECT_SOURCE_DIR})
 add_executable (reduce_test "adt-tests/mir-reduce-test.c")
 target_include_directories(reduce_test PRIVATE ${PROJECT_SOURCE_DIR})
 
-add_executable(cjit_test "heaven7/main.c")
-target_include_directories(reduce_test PRIVATE ${PROJECT_SOURCE_DIR})
+## heaven7 ##
+#file(GLOB_RECURSE SRC_EVALS  heaven7/include/evaluate/*)
+add_executable(cjit_test
+    "heaven7/Compiler.h"
+    "heaven7/Compiler.cpp"
+    "heaven7/main.cc"
+    )
+#target_include_directories(cjit_test PRIVATE "heaven7/include")
 
 add_test(varr-test varr_test)
 add_test(dlist-test dlist_test)
