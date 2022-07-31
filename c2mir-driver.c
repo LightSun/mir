@@ -633,6 +633,15 @@ static void sort_modules (MIR_context_t ctx) {
 }
 //./c2m.exe -S test.c
 int main (int argc, char *argv[], char *env[]) {
+   if(argc == 1){
+       const char* arg1 = "-S";
+       const char* arg2 = "D:/study/github/mine_clone/mir/heaven7/struct_test2.c";
+       char* arr[3];
+       arr[0] = argv[0];
+       arr[1] = (char*)arg1;
+       arr[2] = (char*)arg2;
+       return main(3, arr, env);
+   }
   int i, bin_p;
   size_t len;
 

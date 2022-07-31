@@ -1,4 +1,4 @@
-
+﻿
 #include <string.h>
 #include "../mir.h"
 #include "../mir-gen.h"
@@ -10,6 +10,174 @@ static void our_exit (int code) {
   exit (code);
 }
 typedef int(*Addr)(int,int);
+typedef unsigned long (*jit_loop_t)(unsigned long);
+
+
+void test_struct0(){
+    MIR_module_t mir_module;
+    MIR_context_t ctx;
+    MIR_item_t mir_func;
+    //
+    ctx = MIR_init ();
+    //gen
+    MIR_gen_init(ctx, 0);
+    MIR_gen_set_optimize_level(ctx, 0, 2);
+    MIR_link(ctx, MIR_set_gen_interface, NULL);
+
+    mir_module = MIR_new_module(ctx, "test_struct");
+}
+
+/**
+unsigned long loop(unsigned long n)
+{
+  unsigned long sum = 0;
+  for(unsigned long i = 0; i <= n; ++i)
+    sum += i;
+
+   return sum;
+}
+ */
+void test_loop(){
+    MIR_module_t mir_module;
+    MIR_context_t ctx;
+    MIR_item_t mir_func;
+    //
+    ctx = MIR_init ();
+
+    //gen
+    MIR_gen_init(ctx, 0);
+    MIR_gen_set_optimize_level(ctx, 0, 2);
+    MIR_link(ctx, MIR_set_gen_interface, NULL);
+
+    mir_module = MIR_new_module(ctx, "m");
+
+    MIR_type_t res_type[1] = {MIR_T_U64};
+    mir_func = MIR_new_func(ctx, "loop", 1, res_type, 1, MIR_T_U64, "n");
+
+    MIR_reg_t n = MIR_reg(ctx, "n", mir_func->u.func);
+    MIR_reg_t i = MIR_new_func_reg(ctx, mir_func->u.func, MIR_T_I64, "i");
+    MIR_reg_t sum = MIR_new_func_reg(ctx, mir_func->u.func, MIR_T_I64, "sum");
+
+    MIR_label_t cond = MIR_new_label(ctx);
+    MIR_label_t out = MIR_new_label(ctx);
+
+    /* sum = 0 */
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_MOV,
+                MIR_new_reg_op(ctx, sum),
+                MIR_new_uint_op(ctx, 0)));
+    /* i = 0 */
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_MOV,
+                MIR_new_reg_op(ctx, i),
+                MIR_new_uint_op(ctx, 0)));
+
+    /* loop top */
+    // if i > n , jump to out.
+    MIR_append_insn(ctx, mir_func, cond);
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_UBGT,// >
+                MIR_new_label_op(ctx, out),
+                MIR_new_reg_op(ctx, i),
+                MIR_new_reg_op(ctx, n)));
+
+    /* sum += i */
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_ADD,
+                MIR_new_reg_op(ctx, sum),
+                MIR_new_reg_op(ctx, sum),
+                MIR_new_reg_op(ctx, i)));
+
+    /* ++i */
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_ADD,
+                MIR_new_reg_op(ctx, i),
+                MIR_new_reg_op(ctx, i),
+                MIR_new_uint_op(ctx, 1)));
+
+    /* jump to cond */
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, cond)));
+    //out:
+    MIR_append_insn(ctx, mir_func, out);
+
+    MIR_append_insn(ctx, mir_func,
+            MIR_new_ret_insn(ctx, 1, MIR_new_reg_op(ctx, sum)));
+
+    MIR_finish_func(ctx);
+    //export symbol
+    MIR_new_export(ctx, mir_func->u.func->name);
+    //end module
+    MIR_finish_module(ctx);
+    MIR_load_module(ctx, mir_func->module);
+
+    //log
+    MIR_output (ctx, stderr);
+    //
+    jit_loop_t  func_addr = (jit_loop_t)MIR_gen(ctx, 0, mir_func);
+    int res = func_addr(5);//15
+    fprintf (stdout, "test_loop add result: %d\n", res);
+    //final
+    MIR_gen_finish (ctx);
+    MIR_finish (ctx);
+}
+
+/**
+// mir detail: https://github.com/vnmakarov/mir/blob/master/MIR.md
+int add(int a, int b){
+    return a + b;
+}
+*/
+void test_mir_gen(){
+    MIR_module_t mir_module;
+    MIR_context_t ctx;
+    MIR_item_t func;
+    //
+    ctx = MIR_init ();
+
+    //gen
+    MIR_gen_init(ctx, 0);
+    MIR_gen_set_optimize_level(ctx, 0, 2);
+    MIR_link(ctx, MIR_set_gen_interface, NULL);
+
+    mir_module = MIR_new_module(ctx, "test_mir_gen");
+    //func sig
+    MIR_type_t res_type[1] = {MIR_T_I32};
+    func = MIR_new_func(ctx, "add", 1, res_type, 2,
+                 MIR_T_I32, "a",
+                 MIR_T_I32, "b"
+                 );
+    //get func arg
+    MIR_reg_t a = MIR_reg(ctx, "a", func->u.func);
+    MIR_reg_t b = MIR_reg(ctx, "b", func->u.func);
+    //local var. here should use int64
+    MIR_reg_t ret = MIR_new_func_reg(ctx, func->u.func, MIR_T_I64, "ret");
+    //...MIR_new_uint_op(ctx, 0) create value op.
+    //ret = a +b
+    MIR_append_insn(ctx, func,
+                MIR_new_insn(ctx, MIR_ADDS,
+                    MIR_new_reg_op(ctx, ret),
+                    MIR_new_reg_op(ctx, a),
+                    MIR_new_reg_op(ctx, b))
+                    );
+    //return ret
+    MIR_append_insn(ctx, func,
+                MIR_new_ret_insn(ctx, 1, MIR_new_reg_op(ctx, ret)));
+    //post
+    MIR_finish_func(ctx);   // endfunc
+    MIR_finish_module(ctx); // endmodule
+    // gen func
+    MIR_load_module(ctx, func->module);
+    //log
+    MIR_output (ctx, stderr);
+
+    Addr add = (Addr)MIR_gen(ctx, 0, func);
+    int res = add(1, 2);
+    fprintf (stdout, "test_mir_gen add result: %d\n", res);
+    //final
+    MIR_gen_finish (ctx);
+    MIR_finish (ctx);
+}
 
 void test_read_struct(){
     const char* file = "/home/heaven7/heaven7/study/github/mine_temp/"
@@ -64,7 +232,11 @@ void test_read_struct(){
 // test ok.
 // gen mir: ./c2m -S test.c   -> test.mir
 int main(int argc, char *argv[]){
-    test_read_struct();
+    setbuf(stdout, NULL);
+    //test_read_struct();
+    //test_mir_gen();
+    test_loop();
+
     const char* file = "/home/heaven7/heaven7/study/github/"
                        "mine_temp/mir/heaven7/test.mir";
     MIR_module_t mir_module;

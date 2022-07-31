@@ -1,4 +1,4 @@
-#ifndef COMPILER_H
+﻿#ifndef COMPILER_H
 #define COMPILER_H
 
 #include <map>
@@ -8,6 +8,10 @@ extern "C"{
 #include "../mir.h"
 #include "../mir-gen.h"
 }
+
+#ifndef REAL
+#define REAL float
+#endif
 
 //#define typedReal(op1, op2) ((sizeof(REAL) == sizeof(float)) ? op1 : op2)
 //just as float
@@ -390,10 +394,26 @@ public:
         pushValue(typed_res);
     }
 
-    void CompileBlock(MIR_label_t code_block){
-        // Push the block label
-        MIR_append_insn(fContext, fCompute, code_block);
-    }
+    void CompileBlock(MIR_label_t code_block);
+//    {
+//        MIR_append_insn(fContext, fCompute, code_block);
+//    }
+
+    void Execute(int* int_heap, REAL* real_heap, REAL** inputs, REAL** outputs)
+        {
+            fCompiledFun((MIR_val_t){.a = (void*)int_heap},
+                         (MIR_val_t){.a = (void*)real_heap},
+                         (MIR_val_t){.a = (void*)inputs},
+                         (MIR_val_t){.a = (void*)outputs});
+            /*
+            // Interpreter mode
+            MIR_interp(fContext, fCompute, NULL, 4,
+                       (MIR_val_t){.a = (void*)int_heap},
+                       (MIR_val_t){.a = (void*)real_heap},
+                       (MIR_val_t){.a = (void*)inputs},
+                       (MIR_val_t){.a = (void*)outputs});
+            */
+        }
 
     static void* importResolver(const char* name)
     {

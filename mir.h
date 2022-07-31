@@ -1,4 +1,4 @@
-/* This file is a part of MIR project.
+﻿/* This file is a part of MIR project.
    Copyright (C) 2018-2021 Vladimir Makarov <vmakarov.gcc@gmail.com>.
 */
 

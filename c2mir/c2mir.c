@@ -1,4 +1,4 @@
-/* This file is a part of MIR project.
+﻿/* This file is a part of MIR project.
    Copyright (C) 2018-2021 Vladimir Makarov <vmakarov.gcc@gmail.com>.
 */
 
@@ -112,7 +112,7 @@ typedef struct {
   enum symbol_mode mode;
   node_t id;
   node_t scope;
-  node_t def_node, aux_node;
+  node_t def_node, aux_node;//def node, execute node
   VARR (node_t) * defs;
 } symbol_t;
 
@@ -2172,6 +2172,8 @@ static void pre_finish (c2m_ctx_t c2m_ctx) {
   free (c2m_ctx->pre_ctx);
 }
 
+// handle like '#include <stdlib.h>'
+//fname: stdlib.h
 static void add_include_stream (c2m_ctx_t c2m_ctx, const char *fname, const char *content,
                                 pos_t err_pos) {
   pre_ctx_t pre_ctx = c2m_ctx->pre_ctx;
@@ -5300,6 +5302,7 @@ static void parse_init (c2m_ctx_t c2m_ctx) {
   init_streams (c2m_ctx);
   VARR_CREATE (token_t, recorded_tokens, 32);
   VARR_CREATE (token_t, buffered_tokens, 32);
+  //add some std macros.
   pre_init (c2m_ctx);
   kw_add (c2m_ctx, "_Bool", T_BOOL, 0);
   kw_add (c2m_ctx, "_Complex", T_COMPLEX, 0);
@@ -5728,7 +5731,7 @@ struct enum_value {
     mir_ullong u_val;
   } u;
 };
-
+//struct or union
 struct node_scope {
   unsigned char stack_var_p; /* necessity for frame */
   unsigned func_scope_num;
@@ -6054,6 +6057,7 @@ static void update_members_offset (struct type *type, mir_size_t offset) {
 }
 
 static void set_type_layout (c2m_ctx_t c2m_ctx, struct type *type) {
+  //计算原始占用大小
   mir_size_t overall_size = 0;
 
   if (type->raw_size != MIR_SIZE_MAX) return; /* defined */
@@ -9673,7 +9677,7 @@ static void check (c2m_ctx_t c2m_ctx, node_t r, node_t context) {
   }
   VARR_POP (node_t, context_stack);
 }
-
+//check
 static void do_context (c2m_ctx_t c2m_ctx, node_t r) {
   check_ctx_t check_ctx = c2m_ctx->check_ctx;
 
@@ -12845,7 +12849,7 @@ static void gen_finish (c2m_ctx_t c2m_ctx) {
   if (init_els != NULL) VARR_DESTROY (init_el_t, init_els);
   free (c2m_ctx->gen_ctx);
 }
-
+//mir gen: entry
 static void gen_mir (c2m_ctx_t c2m_ctx, node_t r) {
   gen_ctx_t gen_ctx;
   MIR_context_t ctx = c2m_ctx->ctx;
@@ -13314,6 +13318,15 @@ static void init_include_dirs (c2m_ctx_t c2m_ctx) {
 #if defined(__APPLE__) || defined(__unix__)
   VARR_PUSH (char_ptr_t, system_headers, "/usr/include");
 #endif
+  //===HEAVEN7===
+  if(VARR_LENGTH(char_ptr_t, system_headers) == 0){
+#if defined(__x86_64__)
+      VARR_PUSH (char_ptr_t, system_headers,
+                 "F:/tools/Qt/Qt5.12.9/Tools/mingw730_64/x86_64-w64-mingw32/include");
+#endif
+  }
+  //===HEAVEN7===
+
   VARR_PUSH (char_ptr_t, system_headers, NULL);
   header_dirs = (const char **) VARR_ADDR (char_ptr_t, headers);
   system_header_dirs = (const char **) VARR_ADDR (char_ptr_t, system_headers);
@@ -13432,6 +13445,7 @@ static const char *get_module_name (c2m_ctx_t c2m_ctx) {
 
 static int top_level_getc (c2m_ctx_t c2m_ctx) { return c_getc (c_getc_data); }
 
+//the entry
 int c2mir_compile (MIR_context_t ctx, struct c2mir_options *ops, int (*getc_func) (void *),
                    void *getc_data, const char *source_name, FILE *output_file) {
   struct c2m_ctx *c2m_ctx = *c2m_ctx_loc (ctx);
