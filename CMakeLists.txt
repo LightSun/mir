@@ -103,6 +103,7 @@ target_include_directories(reduce_test PRIVATE ${PROJECT_SOURCE_DIR})
 add_executable(cjit_test
     "heaven7/Compiler.h"
     "heaven7/Compiler.cpp"
+    "heaven7/MIRCompiler.h"
     "heaven7/main.cc"
     )
 #target_include_directories(cjit_test PRIVATE "heaven7/include")

@@ -1995,7 +1995,7 @@ MIR_insn_t MIR_copy_insn (MIR_context_t ctx, MIR_insn_t insn) {
   size_t size;
   mir_assert (insn != NULL);
   size = sizeof (struct MIR_insn) + sizeof (MIR_op_t) * (insn->nops == 0 ? 0 : insn->nops - 1);
-  MIR_insn_t new_insn = malloc (size);
+  MIR_insn_t new_insn = (MIR_insn_t)malloc (size);
 
   if (new_insn == NULL)
     MIR_get_error_func (ctx) (MIR_alloc_error, "Not enough memory to copy insn %s",
