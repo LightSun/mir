@@ -60,11 +60,11 @@ int main (int argc, char *argv[]) {
     fprintf (stderr, "+++++++++++++++++++After simplification:+++++++++++++++\n");
     MIR_output (ctx, stderr);
   }
-  MIR_load_external (ctx, "abort", abort);
-  MIR_load_external (ctx, "exit", our_exit);
-  MIR_load_external (ctx, "printf", printf);
-  MIR_load_external (ctx, "malloc", malloc);
-  MIR_load_external (ctx, "free", free);
+  MIR_load_external (ctx, "abort", (void*)abort);
+  MIR_load_external (ctx, "exit", (void*)our_exit);
+  MIR_load_external (ctx, "printf", (void*)printf);
+  MIR_load_external (ctx, "malloc", (void*)malloc);
+  MIR_load_external (ctx, "free", (void*)free);
   if (interpr_p) {
     assert (execute_p);
     MIR_link (ctx, MIR_set_interp_interface, NULL);

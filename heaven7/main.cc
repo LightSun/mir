@@ -4,6 +4,8 @@
 #include "../mir-gen.h"
 #include "test-read.h"
 
+extern void test_mir_struct();
+
 static char *program_str = NULL;
 static void our_exit (int code) {
   if (program_str != NULL) free (program_str);
@@ -120,6 +122,8 @@ void test_loop(){
     //final
     MIR_gen_finish (ctx);
     MIR_finish (ctx);
+
+    //test_mir_struct();
 }
 
 /**
@@ -231,9 +235,15 @@ void test_read_struct(){
 
 static int test_hello(int argc, char **argv);
 
+
+int main(int argc, char *argv[]){
+  test_mir_struct();
+  return 0;
+}
+
 // test ok.
 // gen mir: ./c2m -S test.c   -> test.mir
-int main(int argc, char *argv[]){
+int main0(int argc, char *argv[]){
     setbuf(stdout, NULL);
     //test_read_struct();
     //test_mir_gen();
